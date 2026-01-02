@@ -1,10 +1,15 @@
 #include <iostream>
+#include <list>
+#include <vector>
+#include <random>
 #include "mnist/include/mnist/mnist_reader_less.hpp"
 #include "definationHeader.h"
 #include "realizationHeader.h"
 
 int main()
 {
+
+
     auto dataset = mnist::read_dataset<uint8_t, uint8_t>();
     std::cout << "1 - Lear Machine\n";
     std::cout << "2 - Start Working\n";
