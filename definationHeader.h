@@ -19,15 +19,23 @@ class AiNumberMachine
 	std::vector<float> OutputLayerBiases;
 public:
 	AiNumberMachine(int inputSize, int hidenLayerQuantity, 
-		int quantityOfNeironsinHidenLayer) {
+		std::vector<int> quantityOfNeironsinHidenLayer) {
 		//Записуємо розмір вхідного шару
 		InputLayer.resize(inputSize);
 		//Записуємо розмірм спрятаних шарів
 		//Перше число це кількість шарів
-		//Друга властивість це кількість нейронів типу float
-		HidenLayer.resize(hidenLayerQuantity, std::vector<float>(quantityOfNeironsinHidenLayer));
+		//Запвонюємо щари спрятаного шару
+		HidenLayer.resize(hidenLayerQuantity);
+		//Тепер записуємо ту кількість нейрон яку було передано для шарів через вектор
+		for (int i = 0; i < HidenLayer.size(); i++) {
+			HidenLayer[i].resize(quantityOfNeironsinHidenLayer[i]);
+		}
 		//Записуємо розміри для скритих шарів біасов
-		HidenLayerBiases.resize(hidenLayerQuantity, std::vector<float>(quantityOfNeironsinHidenLayer));
+		HidenLayerBiases.resize(hidenLayerQuantity);
+		//Робимо те саме що і з спрятаним шаром
+		for (int i = 0; i < HidenLayerBiases.size(); i++) {
+			HidenLayerBiases[i].resize(quantityOfNeironsinHidenLayer[i]);
+		}
 		//Записуємо вихідний шар числом 10, тому що на виході повинно буди одне із 10 чисел
 		OutputLayer.resize(10);
 		//Записуємо розміри для виходячого шару біасов
@@ -48,18 +56,18 @@ public:
 			//буде пов'язаний між кількістю вхідних нейронів з кількістю нейронів першого скритого шару
 			if (i == 0) {
 				rows = inputSize;
-				cols = quantityOfNeironsinHidenLayer;
+				cols = HidenLayer[0].size();
 			}
 			//Перевіряємо якщо це останій шар ваг. Якщо це він то ми записуємо останій вектор ваг як
-			//зв'язок між кількістю осанього скритого шару нейронів з вихідним шаром нейронів.
+			//зв'язок між кількістю останього скритого шару нейронів з вихідним шаром нейронів.
 			else if (i == hidenLayerQuantity) {
-				rows = quantityOfNeironsinHidenLayer;
+				rows = HidenLayer[i - 1].size();
 				cols = 10;
 			}
-			//Записуємо базовий розмір
+			//Записуємо всі інші випадки
 			else {
-				rows = quantityOfNeironsinHidenLayer;
-				cols = quantityOfNeironsinHidenLayer;
+				rows = HidenLayer[i - 1].size();
+				cols = HidenLayer[i].size();
 			}
 			//Заповнюємо наш вектор ваг
 			WeightForNeirons[i].resize(rows, std::vector<float>(cols));
@@ -70,7 +78,7 @@ public:
 		//Вмкористовуємо отримане число для запуска Вихр Марсенна для отримання потіка чисел
 		std::mt19937 gen(rd());
 		//Випадково записуємо числа від -0.5 до 0.5. Напотрібні маленькі числа щоб машина обучалася швидше
-		std::uniform_real_distribution<float> dist(-0.5f, 0.5f);
+		std::uniform_real_distribution<float> dist(-0.1f, 0.1f);
 
 		//Робимо цикл для заповнення рандомними вагами числа щоб нейрона мережа сама обучалася та
 		//покращувалася
@@ -87,7 +95,16 @@ public:
 				}
 			}
 		}
-
+		//Заповнюємо біас для вихідного шару випадковими числами
+		for (int i = 0; i < OutputLayerBiases.size(); i++) {
+			OutputLayerBiases[i] = dist(gen);
+		}
+		//Тепер заповнюємо біаси для скритих слоїв
+		for (int i = 0; i < HidenLayerBiases.size(); i++) {
+			for (int j = 0; j < HidenLayerBiases[i].size(); j++) {
+				HidenLayerBiases[i][j] = dist(gen);
+			}
+		}
 	}
 	int get_result() {
 		int maxIndex = 0;
@@ -105,15 +122,111 @@ public:
 		//Прочитайте більше про функцію ReLU як вона працює в інтернеті
 		return (sum > 0) ? sum : 0;
 	}
+	float derivativeReLU(float x) {
+		//Повертаємо похідну функції
+		return x > 0 ? 1.0f : 0.0f;
+	}
+	void back_propagation() {
+		//Створюємо вектор для помилок виходних нейронів
+		std::vector<float> OutputDeltas(OutputLayer.size());
+
+		std::vector<float> Target(OutputLayer.size());
+
+		//Створюємо двовимірний вектор для запису помилок нейронів у шарах
+		std::vector<std::vector<float>> HidenDeltas(HidenLayer.size());
+		for (int i = 0; i < HidenLayer.size(); i++) {
+			HidenDeltas[i].resize(HidenLayer[i].size());
+		}
+		//Для почвтку ми знайдемо наші помилки для вихідного шару за формулою:
+		//Помилка для ваг та нейронів = похідна помилки помножена на похідну функції
+		for (int i = 0; i < OutputLayer.size(); i++) {
+			OutputDeltas[i] = (OutputLayer[i] - Target[i]) * derivativeReLU(OutputLayer[i]);
+		}
+		//Записуємо основний цикл по якому будемо ідти
+		//Так як ми повертаємося назад то і відлік буде йти назад
+		for (int k = WeightForNeirons.size() - 1; k >= 0; k--) {
+			//Перевіряємо чи на шар часом не пов'язаний з вихідним шаром
+			if (k == WeightForNeirons.size() - 1) {
+				//Тут ми рахуємо помилку для наступного кроку щоб було легше
+				for (int i = 0; i < HidenLayer.back().size(); i++) {
+					//Створюємо суму помилок, тому що однин нейрон спрятаного шару пов'язаний з усіма нейронами іншого гару.
+					//І тому ми рахуємо всі помилки які він завдав і іншим нейронам
+					float sumError = 0;
+					//Проходимося по вихідному шару і шукаємо суму всі нейронів 
+					//помножених на вагу яка їх з'єднує з спрятаним шаром
+					for (int j = 0; j < OutputLayer.size(); j++) {
+						sumError += OutputDeltas[j] * WeightForNeirons.back()[i][j];
+					}
+					//Тут ми убираємо вплив функції на помилку.
+					//Бо нам потрібна чиста помилка і тому ми шукаємо похідну функції і множимо на суму помилок і записуємо її.
+					HidenDeltas.back()[i] = sumError * derivativeReLU(HidenLayer.back()[i]);
+				}
+				//Тут ми змінюємо наші ваги на кращі які будуть робити менші помилки
+				//Ми беремо в цьому циклі нейрони з точки де ми знаходимося
+				for (int i = 0; i < WeightForNeirons.back().size(); i++)
+				{
+					//В цьому циклі ми беремо ті нейрони з якими ми пов'язані
+					for (int f = 0; f < WeightForNeirons.back()[i].size(); f++) {
+						//Рахуємо нові ваги за формулою:
+						//Нова вага = стара вага - (швидкість вчіння * градієнт помилки)
+						//Градієнт помилки розраховувається за формулою: Градієнт помилки = похідна помилки * похідну функції активації * вхідний нейрон
+						//Так як ми вже розрахували одну части цієї формули вище то нам потрібно просто підставити вхідний нейрон (нейрон на якому ми зараз знаходимося)
+						WeightForNeirons.back()[i][f] -= (0.1 * OutputDeltas[f] * HidenLayer.back()[i]);
+					}
+				}
+				//Оновлюємо біас просто за формулою: Новий біас = старий біас - (швидкість вчиння * помилку того нейрона до якого пренадлежить біас)
+				for (int i = 0; i < OutputLayerBiases.size(); i++) {
+					OutputLayerBiases[i] -= (0.1 * OutputDeltas[i]);
+				}
+			}
+			//Тут ми перевіряємо чи часом це не кінець, бо якщо кінець то ми пов'язані з вхідними данними
+			else if (k == 0) {
+				//Ми можемо не шукати помилки для наступних гарів томущо це вже кінцева зупинка
+				//Тут ми шукаємо новів ваги але ми тепер працюємо з вхідними данними
+				for (int i = 0; i < WeightForNeirons[0].size(); i++)
+				{
+					for (int f = 0; f < WeightForNeirons[0][i].size(); f++) {
+						WeightForNeirons[0][i][f] -= (0.1 * InputLayer[i] * HidenDeltas[0][f]);
+					}
+				}
+				//Тут ми просто оновлюємо біас по тій самі формулі
+				for (int i = 0; i < HidenLayerBiases[0].size(); i++) {
+					HidenLayerBiases[0][i] -= (0.1 * HidenDeltas[0][i]);
+				}
+			}
+			//Всі інші випадки
+			else {
+				//Обраховуємо помилку для наступного шару по тій самі формулі що була вище
+				for (int i = 0; i < HidenLayer[k - 1].size(); i++) {
+					float sumError = 0;
+					for (int j = 0; j < HidenLayer[k].size(); j++) {
+						sumError += HidenDeltas[k][j] * WeightForNeirons[k][i][j];
+					}
+					HidenDeltas[k - 1][i] = sumError * derivativeReLU(HidenLayer[k - 1][i]);
+				}
+				//Так само оновлюємо ваги як і вище
+				for (int i = 0; i < WeightForNeirons[k].size(); i++)
+				{
+					for (int f = 0; f < WeightForNeirons[k][i].size(); f++) {
+						WeightForNeirons[k][i][f] -= (0.1 * HidenLayer[k - 1][i] * HidenDeltas[k][f]);
+					}
+				}
+				//Оновлюємо біас по тій самій формулі як і вище
+				for (int i = 0; i < HidenLayerBiases[k].size(); i++) {
+					HidenLayerBiases[k][i] -= (0.1 * HidenDeltas[k][i]);
+				}
+			}
+		}
+	}
 	void forward_propagation(int expectation_result) {
 		//Починаємо обучення з обичного обрахунку нейронів
 		//Створюємо прохід по скритим шарам
 		for (int i = 0; i < HidenLayer.size(); i++) {
-			//Перевіряємо чи це перший вхід бо якщо так ми харуємо нові нейрон задопомогою віхідного 
+			//Перевіряємо чи це перший вхід бо якщо так ми рахуємо нові нейрон задопомогою віхідного 
 			//шару який ми передали
 			if (i == 0) {
 				//Спочатку проходемо по нейронам скритого шару,
-				//бо на потрібно записати їм значення
+				//бо нам потрібно записати їм значення
 				for (int j = 0; j < HidenLayer[i].size(); j++) {
 					//Створюємо суму. Сума для кожного нейрона буде обраховуватися заново
 					float sum = 0;
@@ -157,8 +270,8 @@ public:
 			sum += OutputLayerBiases[i];
 			OutputLayer[i] = funActivation(sum);
 		}
-		//Отримаємо результат обробки
-		float get_result();
+		//Запускаємо обробку помилок які ми зробили
+		back_propagation();
 	}
-	void back_propagation() {}
+	//----------------------------------------------------------------------------ТРЕБА ДОРОБИТИ ДАНІ ЯКІ ПРИХОДЯТЬ В ФУНКЦІЮ ТА ПЕРЕВІРКА СУМИ ПОМИЛОК---------------------------------------------------------------//
 };
