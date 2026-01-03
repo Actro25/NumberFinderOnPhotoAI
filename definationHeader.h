@@ -17,6 +17,8 @@ class AiNumberMachine
 	std::vector<float> OutputLayer;
 	//Створення біасов для розрахунку кінцевих нейронів з зміщенням
 	std::vector<float> OutputLayerBiases;
+	
+	float LearningRate = 0.005;
 public:
 	AiNumberMachine(int inputSize, int hidenLayerQuantity, 
 		std::vector<int> quantityOfNeironsinHidenLayer) {
@@ -126,12 +128,9 @@ public:
 		//Повертаємо похідну функції
 		return x > 0 ? 1.0f : 0.0f;
 	}
-	void back_propagation() {
+	void back_propagation(std::vector<float> Target) {
 		//Створюємо вектор для помилок виходних нейронів
 		std::vector<float> OutputDeltas(OutputLayer.size());
-
-		std::vector<float> Target(OutputLayer.size());
-
 		//Створюємо двовимірний вектор для запису помилок нейронів у шарах
 		std::vector<std::vector<float>> HidenDeltas(HidenLayer.size());
 		for (int i = 0; i < HidenLayer.size(); i++) {
@@ -140,7 +139,7 @@ public:
 		//Для почвтку ми знайдемо наші помилки для вихідного шару за формулою:
 		//Помилка для ваг та нейронів = похідна помилки помножена на похідну функції
 		for (int i = 0; i < OutputLayer.size(); i++) {
-			OutputDeltas[i] = (OutputLayer[i] - Target[i]) * derivativeReLU(OutputLayer[i]);
+			OutputDeltas[i] = (OutputLayer[i] - Target[i]); //ТУТ БУЛО ПРИБРАНО ПОХІДНУ ФУНКЦІЇ
 		}
 		//Записуємо основний цикл по якому будемо ідти
 		//Так як ми повертаємося назад то і відлік буде йти назад
@@ -171,12 +170,12 @@ public:
 						//Нова вага = стара вага - (швидкість вчіння * градієнт помилки)
 						//Градієнт помилки розраховувається за формулою: Градієнт помилки = похідна помилки * похідну функції активації * вхідний нейрон
 						//Так як ми вже розрахували одну части цієї формули вище то нам потрібно просто підставити вхідний нейрон (нейрон на якому ми зараз знаходимося)
-						WeightForNeirons.back()[i][f] -= (0.1 * OutputDeltas[f] * HidenLayer.back()[i]);
+						WeightForNeirons.back()[i][f] -= (LearningRate * OutputDeltas[f] * HidenLayer.back()[i]);
 					}
 				}
 				//Оновлюємо біас просто за формулою: Новий біас = старий біас - (швидкість вчиння * помилку того нейрона до якого пренадлежить біас)
 				for (int i = 0; i < OutputLayerBiases.size(); i++) {
-					OutputLayerBiases[i] -= (0.1 * OutputDeltas[i]);
+					OutputLayerBiases[i] -= (LearningRate * OutputDeltas[i]);
 				}
 			}
 			//Тут ми перевіряємо чи часом це не кінець, бо якщо кінець то ми пов'язані з вхідними данними
@@ -186,12 +185,12 @@ public:
 				for (int i = 0; i < WeightForNeirons[0].size(); i++)
 				{
 					for (int f = 0; f < WeightForNeirons[0][i].size(); f++) {
-						WeightForNeirons[0][i][f] -= (0.1 * InputLayer[i] * HidenDeltas[0][f]);
+						WeightForNeirons[0][i][f] -= (LearningRate * InputLayer[i] * HidenDeltas[0][f]);
 					}
 				}
 				//Тут ми просто оновлюємо біас по тій самі формулі
 				for (int i = 0; i < HidenLayerBiases[0].size(); i++) {
-					HidenLayerBiases[0][i] -= (0.1 * HidenDeltas[0][i]);
+					HidenLayerBiases[0][i] -= (LearningRate * HidenDeltas[0][i]);
 				}
 			}
 			//Всі інші випадки
@@ -208,17 +207,19 @@ public:
 				for (int i = 0; i < WeightForNeirons[k].size(); i++)
 				{
 					for (int f = 0; f < WeightForNeirons[k][i].size(); f++) {
-						WeightForNeirons[k][i][f] -= (0.1 * HidenLayer[k - 1][i] * HidenDeltas[k][f]);
+						WeightForNeirons[k][i][f] -= (LearningRate * HidenLayer[k - 1][i] * HidenDeltas[k][f]);
 					}
 				}
 				//Оновлюємо біас по тій самій формулі як і вище
 				for (int i = 0; i < HidenLayerBiases[k].size(); i++) {
-					HidenLayerBiases[k][i] -= (0.1 * HidenDeltas[k][i]);
+					HidenLayerBiases[k][i] -= (LearningRate * HidenDeltas[k][i]);
 				}
 			}
 		}
 	}
-	void forward_propagation(int expectation_result) {
+	void forward_propagation(std::vector<float> input_data, std::vector<float> expectation_data) {
+		//Перезаписуємо вхідні данні на ті які ми передаємо для обучення
+		InputLayer = input_data;
 		//Починаємо обучення з обичного обрахунку нейронів
 		//Створюємо прохід по скритим шарам
 		for (int i = 0; i < HidenLayer.size(); i++) {
@@ -268,10 +269,44 @@ public:
 				sum += HidenLayer.back()[j] * WeightForNeirons.back()[j][i];
 			}
 			sum += OutputLayerBiases[i];
-			OutputLayer[i] = funActivation(sum);
+			OutputLayer[i] = sum;
 		}
-		//Запускаємо обробку помилок які ми зробили
-		back_propagation();
+
+		//Запускаємо обробку помилок які ми зробили та передаємо вектор очікуваної відповіді
+		back_propagation(expectation_data);
 	}
-	//----------------------------------------------------------------------------ТРЕБА ДОРОБИТИ ДАНІ ЯКІ ПРИХОДЯТЬ В ФУНКЦІЮ ТА ПЕРЕВІРКА СУМИ ПОМИЛОК---------------------------------------------------------------//
+	void predict(const std::vector<float>& input_data) {
+		InputLayer = input_data;
+		for (int i = 0; i < HidenLayer.size(); i++) {
+			if (i == 0) {
+				for (int j = 0; j < HidenLayer[i].size(); j++) {
+					float sum = 0;
+					for (int q = 0; q < InputLayer.size(); q++) {
+						sum += InputLayer[q] * WeightForNeirons[i][q][j];
+					}
+					sum += HidenLayerBiases[i][j];
+					HidenLayer[i][j] = funActivation(sum);
+				}
+			}
+			else {
+				for (int j = 0; j < HidenLayer[i].size(); j++) {
+					float sum = 0;
+					for (int q = 0; q < HidenLayer[i - 1].size(); q++) {
+						sum += HidenLayer[i - 1][q] * WeightForNeirons[i][q][j];
+					}
+					sum += HidenLayerBiases[i][j];
+					HidenLayer[i][j] = funActivation(sum);
+				}
+			}
+		}
+		for (int i = 0; i < OutputLayer.size(); i++) {
+			float sum = 0;
+			for (int j = 0; j < HidenLayer.back().size(); j++) {
+				sum += HidenLayer.back()[j] * WeightForNeirons.back()[j][i];
+			}
+			sum += OutputLayerBiases[i];
+			OutputLayer[i] = sum;
+		}
+
+	}
 };

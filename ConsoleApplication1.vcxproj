@@ -128,6 +128,7 @@
   <ItemGroup>
     <ClInclude Include="definationHeader.h" />
     <ClInclude Include="realizationHeader.h" />
+    <ClInclude Include="stb_image.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
